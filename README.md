@@ -22,9 +22,10 @@ py -m pip install -r requirements.txt
 py .\app.py
 ```
 
-4. Open `index.html` in a browser.
+4. Open `index.html` in a browser to launch the front-end. Alternatively, if you have Live Server extension, you can open `index.html` with Live Server.
 
-The frontend calls the backend at `http://localhost:5000`.
+
+***Note***: The frontend calls the backend at `http://localhost:5000`.
 
 <br>
 <br>
