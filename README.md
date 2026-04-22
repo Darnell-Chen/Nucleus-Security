@@ -5,8 +5,12 @@ This project is a browser calculator UI backed by a small Flask API.
 
 ## Run Locally
 
-1. Create/activate a Python environment.
-2. Install dependencies from `requirements.txt`:
+1. Move into the **Calculator** directory:
+```bash
+cd Calculator
+```
+
+3. Install dependencies from `requirements.txt`:
 
 ```bash
 py -m pip install -r requirements.txt
