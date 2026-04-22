@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>iPhone Style Calculator</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<div class="phone">
+		<main class="calculator" aria-label="Calculator">
+			<div class="display-wrap">
+				<input id="display" class="display" type="text" value="0" readonly aria-live="polite" />
+			</div>
+
+			<section class="keys" aria-label="Calculator Keys">
+				<button class="utility" data-action="clear">AC</button>
+				<button class="utility" data-action="toggle-sign">+/-</button>
+				<button class="utility" data-action="percent">%</button>
+				<button class="operator" data-action="operator" data-value="/">÷</button>
+
+				<button class="digit" data-action="digit" data-value="7">7</button>
+				<button class="digit" data-action="digit" data-value="8">8</button>
+				<button class="digit" data-action="digit" data-value="9">9</button>
+				<button class="operator" data-action="operator" data-value="*">×</button>
+
+				<button class="digit" data-action="digit" data-value="4">4</button>
+				<button class="digit" data-action="digit" data-value="5">5</button>
+				<button class="digit" data-action="digit" data-value="6">6</button>
+				<button class="operator" data-action="operator" data-value="-">−</button>
+
+				<button class="digit" data-action="digit" data-value="1">1</button>
+				<button class="digit" data-action="digit" data-value="2">2</button>
+				<button class="digit" data-action="digit" data-value="3">3</button>
+				<button class="operator" data-action="operator" data-value="+">+</button>
+
+				<button class="digit zero" data-action="digit" data-value="0">0</button>
+				<button class="digit" data-action="decimal">.</button>
+				<button class="operator" data-action="equals">=</button>
+			</section>
+		</main>
+	</div>
+
+  <script>
+    const display = document.getElementById("display");
+    const keys = document.querySelector(".keys");
+
+    const API_BASE = "http://localhost:5000";
+
+    let current = "0";
+    let previous = null;
+    let operator = null;
+    let waitingForNext = false;
+
+    const unformat = (value) => value.replace(/,/g, "");
+
+    const updateDisplay = () => {
+      display.value = current;
+    };
+
+    const resetOperatorHighlight = () => {
+      document.querySelectorAll(".operator[data-action='operator']").forEach((btn) => {
+        btn.classList.remove("active");
+      });
+    };
+
+    const inputDigit = (digit) => {
+      if (waitingForNext || current === "Error") {
+        current = digit;
+        waitingForNext = false;
+      } else {
+        current = current === "0" ? digit : unformat(current) + digit;
+      }
+      resetOperatorHighlight();
+    };
+
+    const inputDecimal = () => {
+      if (waitingForNext || current === "Error") {
+        current = "0.";
+        waitingForNext = false;
+        resetOperatorHighlight();
+        return;
+      }
+      if (!unformat(current).includes(".")) {
+        current = `${unformat(current)}.`;
+      }
+      resetOperatorHighlight();
+    };
+
+    const clearAll = () => {
+      current = "0";
+      previous = null;
+      operator = null;
+      waitingForNext = false;
+      resetOperatorHighlight();
+    };
+
+    const toggleSign = async () => {
+      const value = Number(unformat(current));
+      if (value !== 0) {
+        const negated = value * -1;
+        try {
+          const response = await fetch(`${API_BASE}/format`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ value: negated })
+          });
+          const data = await response.json();
+          current = data.display || current;
+        } catch (error) {
+          console.error("Format error:", error);
+          current = String(negated);
+        }
+      }
+    };
+
+    const inputPercent = async () => {
+      const value = Number(unformat(current));
+      const percent = value / 100;
+      try {
+        const response = await fetch(`${API_BASE}/format`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: percent })
+        });
+        const data = await response.json();
+        current = data.display || current;
+      } catch (error) {
+        console.error("Format error:", error);
+        current = String(percent);
+      }
+
+      waitingForNext = true;
+      resetOperatorHighlight();
+    };
+
+    const handleOperator = (nextOperator, targetBtn) => {
+      const inputValue = Number(unformat(current));
+
+      if (operator && !waitingForNext) {
+        performCalculation(previous, inputValue, operator, nextOperator, targetBtn);
+        return;
+      }
+
+      previous = inputValue;
+      waitingForNext = true;
+      operator = nextOperator;
+
+      resetOperatorHighlight();
+      targetBtn.classList.add("active");
+    };
+
+    const performCalculation = async (a, b, currentOp, nextOperator = null, targetBtn = null) => {
+      try {
+        const response = await fetch(`${API_BASE}/calculate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ a, b, operator: currentOp })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          current = "Error";
+        } else {
+          current = data.display;
+          previous = data.result;
+        }
+
+        if (nextOperator) {
+          operator = nextOperator;
+          waitingForNext = true;
+          resetOperatorHighlight();
+          if (targetBtn) {
+            targetBtn.classList.add("active");
+          }
+        } else {
+          operator = null;
+          waitingForNext = true;
+        }
+      } catch (error) {
+        console.error("Calculation error:", error);
+        current = "Error";
+      }
+
+      updateDisplay();
+    };
+
+    const handleEquals = async () => {
+      if (!operator || previous === null) {
+        return;
+      }
+
+      const inputValue = Number(unformat(current));
+      await performCalculation(previous, inputValue, operator);
+      previous = null;
+      operator = null;
+      resetOperatorHighlight();
+    };
+
+    const triggerButtonAnimation = (button) => {
+      button.classList.add("pressed");
+      setTimeout(() => button.classList.remove("pressed"), 120);
+    };
+
+    const processAction = async (action, value, button) => {
+      switch (action) {
+        case "digit":
+          inputDigit(value);
+          break;
+        case "decimal":
+          inputDecimal();
+          break;
+        case "clear":
+          clearAll();
+          break;
+        case "toggle-sign":
+          await toggleSign();
+          break;
+        case "percent":
+          await inputPercent();
+          break;
+        case "operator":
+          handleOperator(value, button);
+          break;
+        case "equals":
+          await handleEquals();
+          break;
+        default:
+          break;
+      }
+
+      updateDisplay();
+    };
+
+    keys.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) {
+        return;
+      }
+
+      const { action, value } = button.dataset;
+      triggerButtonAnimation(button);
+      processAction(action, value, button);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const keyMap = {
+        Enter: { action: "equals" },
+        "=": { action: "equals" },
+        Escape: { action: "clear" },
+        Backspace: { action: "clear" },
+        "+": { action: "operator", value: "+" },
+        "-": { action: "operator", value: "-" },
+        "*": { action: "operator", value: "*" },
+        "/": { action: "operator", value: "/" },
+        "%": { action: "percent" },
+        ".": { action: "decimal" }
+      };
+
+      if (/^[0-9]$/.test(event.key)) {
+        const button = document.querySelector(`[data-action='digit'][data-value='${event.key}']`);
+        if (button) {
+          triggerButtonAnimation(button);
+        }
+        processAction("digit", event.key, button);
+        event.preventDefault();
+        return;
+      }
+
+      const mapped = keyMap[event.key];
+      if (!mapped) {
+        return;
+      }
+
+      const selector = mapped.value
+        ? `[data-action='${mapped.action}'][data-value='${mapped.value}']`
+        : `[data-action='${mapped.action}']`;
+
+      const button = document.querySelector(selector);
+      if (button) {
+        triggerButtonAnimation(button);
+      }
+
+      processAction(mapped.action, mapped.value, button);
+      event.preventDefault();
+    });
+
+    updateDisplay();
+  </script>
+</body>
+</html>
